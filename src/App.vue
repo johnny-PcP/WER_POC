@@ -207,12 +207,12 @@ function handleUpdateLineText(lineId: string, newText: string) {
   }
 }
 
-// 批次合併：將匹配的單字區塊向指定方向合併
+// 批次合併：將匹配的區塊向指定方向合併
 function batchMerge(direction: 'left' | 'right') {
   if (!mergeChar.value.trim()) return
 
-  const charToMerge = mergeChar.value.trim()
-  saveCurrentState()
+  const textToMerge = mergeChar.value.trim()
+  let mergeCount = 0
 
   for (const line of lines.value) {
     // 從後往前處理，避免 index 變動問題
@@ -220,32 +220,38 @@ function batchMerge(direction: 'left' | 'right') {
       const segment = line.segments[i]
       if (!segment) continue
 
-      // 檢查：單字、匹配、未刪除、非錯誤（藍線）
-      if (
-        segment.text === charToMerge &&
-        segment.text.length === 1 &&
-        !segment.isDeleted &&
-        !segment.isError
-      ) {
+      // 檢查：匹配、未刪除、非錯誤（藍線）
+      if (segment.text === textToMerge && !segment.isDeleted && !segment.isError) {
         if (direction === 'left' && i > 0) {
-          // 向左合併：將此字加到前一個區塊
+          // 向左合併：將此區塊加到前一個區塊
           const prevSegment = line.segments[i - 1]
           if (prevSegment) {
+            // 只在第一次合併時儲存狀態
+            if (mergeCount === 0) saveCurrentState()
             prevSegment.text += segment.text
             prevSegment.endIndex = segment.endIndex
             line.segments.splice(i, 1)
+            mergeCount++
           }
         } else if (direction === 'right' && i < line.segments.length - 1) {
-          // 向右合併：將此字加到後一個區塊的開頭
+          // 向右合併：將此區塊加到後一個區塊的開頭
           const nextSegment = line.segments[i + 1]
           if (nextSegment) {
+            // 只在第一次合併時儲存狀態
+            if (mergeCount === 0) saveCurrentState()
             nextSegment.text = segment.text + nextSegment.text
             nextSegment.startIndex = segment.startIndex
             line.segments.splice(i, 1)
+            mergeCount++
           }
         }
       }
     }
+  }
+
+  // 如果沒有找到匹配的區塊，顯示提示
+  if (mergeCount === 0) {
+    alert(`找不到符合條件的區塊「${textToMerge}」（需為藍線且未刪除）`)
   }
 }
 
@@ -272,7 +278,8 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
     if (isTextEditMode.value) {
       exitTextEditMode()
     } else {
-      handleBackToInput()
+      // 重置全部 ID，修復方向鍵導航問題
+      handleReParseAll()
     }
   }
 }
@@ -293,7 +300,7 @@ onUnmounted(() => {
 
       <!-- 輸入區 -->
       <div v-if="!isMarking" class="bg-white rounded-lg shadow-md p-6">
-        <TextInputArea @start-marking="handleStartMarking" @clear="handleClearAll" />
+        <TextInputArea :initial-text="inputText" @start-marking="handleStartMarking" @clear="handleClearAll" />
       </div>
 
       <!-- 標記區 -->
@@ -355,13 +362,12 @@ onUnmounted(() => {
 
         <!-- 批次合併工具 -->
         <div class="flex items-center gap-2 text-sm">
-          <span class="text-gray-600">批次合併單字：</span>
+          <span class="text-gray-600">批次合併：</span>
           <input
             v-model="mergeChar"
             type="text"
-            maxlength="1"
-            class="w-12 px-2 py-1 border border-gray-300 rounded text-center"
-            placeholder="字"
+            class="w-24 px-2 py-1 border border-gray-300 rounded text-center"
+            placeholder="文字"
           />
           <button
             class="px-2 py-1 bg-purple-100 text-purple-600 rounded hover:bg-purple-200 transition-colors"

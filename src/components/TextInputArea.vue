@@ -1,7 +1,21 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
-const inputText = ref('')
+const props = defineProps<{
+  initialText?: string
+}>()
+
+const inputText = ref(props.initialText || '')
+
+// 當外部傳入的 initialText 變化時，更新內部狀態
+watch(
+  () => props.initialText,
+  (newText) => {
+    if (newText !== undefined) {
+      inputText.value = newText
+    }
+  },
+)
 
 const emit = defineEmits<{
   startMarking: [text: string]
