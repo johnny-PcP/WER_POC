@@ -83,7 +83,7 @@ const { editMode } = useKeyboard(() => lines.value, selection, {
 const { getPreviewHighlight, isAdjacentPreview } = useSegmentPreview(
   () => lines.value,
   selection,
-  editMode
+  editMode,
 )
 
 // 設置搜尋功能
@@ -101,7 +101,7 @@ watch(
         el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       })
     }
-  }
+  },
 )
 
 function handleStartMarking(text: string) {
@@ -150,7 +150,19 @@ function handleToggleSegment(lineId: string, segmentId: string) {
     const segment = line.segments.find((s) => s.id === segmentId)
     if (segment) {
       saveCurrentState()
-      segment.isError = !segment.isError
+      // 三態循環：正常 → 錯誤 → 不判定 → 正常
+      if (segment.isDeleted) {
+        // 不判定 → 正常
+        segment.isDeleted = false
+        segment.isError = false
+      } else if (segment.isError) {
+        // 錯誤 → 不判定
+        segment.isError = false
+        segment.isDeleted = true
+      } else {
+        // 正常 → 錯誤
+        segment.isError = true
+      }
     }
   }
 }
@@ -359,11 +371,15 @@ onUnmounted(() => {
     <header class="sticky top-0 z-50 bg-white shadow-sm border-b border-slate-200">
       <div class="max-w-5xl mx-auto px-4 py-3">
         <div class="flex items-center justify-center gap-3">
-          <div class="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
+          <div
+            class="w-9 h-9 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md"
+          >
             <span class="text-white font-bold text-base">W</span>
           </div>
           <div>
-            <h1 class="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+            <h1
+              class="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent"
+            >
               Johnny's WER Tool
             </h1>
             <p class="text-xs text-slate-500">Word Error Rate Calculator</p>
@@ -388,17 +404,25 @@ onUnmounted(() => {
       <!-- 輸入區 -->
       <div v-if="!isMarking" class="space-y-5">
         <!-- 說明區塊 -->
-        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5 shadow-sm">
+        <div
+          class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5 shadow-sm"
+        >
           <p class="font-semibold text-blue-900 mb-3">Word Error Rate (WER) 標記工具</p>
           <ul class="space-y-2 text-sm text-blue-700">
             <li>快速標記語音辨識或文字轉錄的錯誤，計算 WER</li>
             <li>大部分操作基於<strong class="text-blue-800">鍵盤快捷鍵</strong>，提升標記效率</li>
-            <li>資料會自動儲存於<strong class="text-blue-800">瀏覽器本地</strong>，重新整理不會遺失</li>
+            <li>
+              資料會自動儲存於<strong class="text-blue-800">瀏覽器本地</strong>，重新整理不會遺失
+            </li>
           </ul>
         </div>
 
         <div class="bg-white rounded-xl shadow-md p-6 border border-slate-200">
-          <TextInputArea :initial-text="inputText" @start-marking="handleStartMarking" @clear="handleClearAll" />
+          <TextInputArea
+            :initial-text="inputText"
+            @start-marking="handleStartMarking"
+            @clear="handleClearAll"
+          />
         </div>
       </div>
 
@@ -410,52 +434,87 @@ onUnmounted(() => {
             <p class="font-medium text-slate-700 mb-2">快捷鍵</p>
             <div class="space-y-1.5">
               <p class="flex items-center gap-1.5">
-                <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">←</kbd>
-                <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">→</kbd>
+                <kbd
+                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                  >↑↓←→</kbd
+                >
                 <span class="text-slate-500">移動</span>
               </p>
               <p class="flex items-center gap-1.5">
-                <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">Space</kbd>
+                <kbd
+                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                  >Space</kbd
+                >
                 <span class="text-slate-500">切換狀態</span>
               </p>
               <p class="flex items-center gap-1.5">
-                <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">D</kbd>
+                <kbd
+                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                  >D</kbd
+                >
                 <span class="text-slate-500">刪除</span>
               </p>
               <p class="flex items-center gap-1.5">
-                <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">A</kbd>
+                <kbd
+                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                  >A</kbd
+                >
                 <span class="text-slate-500">復原</span>
-              </p>
-              <p class="flex items-center gap-1.5">
-                <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">S</kbd>
-                <span class="text-slate-500">分割</span>
-              </p>
-              <p class="flex items-center gap-1.5">
-                <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">C</kbd>
-                <span class="text-slate-500">合併</span>
               </p>
             </div>
             <div class="pt-2 border-t border-slate-200 space-y-1.5">
               <p class="flex items-center gap-1.5">
-                <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">Z</kbd>
+                <kbd
+                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                  >Z</kbd
+                >
                 <span class="text-slate-400">+</span>
-                <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">←→</kbd>
+                <kbd
+                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                  >←→</kbd
+                >
               </p>
               <p class="text-slate-500 pl-1">調整左邊界</p>
               <p class="flex items-center gap-1.5">
-                <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">X</kbd>
+                <kbd
+                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                  >X</kbd
+                >
                 <span class="text-slate-400">+</span>
-                <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">←→</kbd>
+                <kbd
+                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                  >←→</kbd
+                >
               </p>
               <p class="text-slate-500 pl-1">調整右邊界</p>
+              <p class="flex items-center gap-1.5 mt-2">
+                <kbd
+                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                  >C</kbd
+                >
+                <span class="text-slate-500">快速向右合併</span>
+              </p>
+              <p class="flex items-center gap-1.5">
+                <kbd
+                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                  >S</kbd
+                >
+                <span class="text-slate-500">分割邊界</span>
+              </p>
             </div>
             <div class="pt-2 border-t border-slate-200 space-y-1.5">
               <p class="flex items-center gap-1.5">
-                <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">Enter</kbd>
+                <kbd
+                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                  >Enter</kbd
+                >
                 <span class="text-slate-500">編輯模式</span>
               </p>
               <p class="flex items-center gap-1.5">
-                <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">Esc</kbd>
+                <kbd
+                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                  >Esc</kbd
+                >
                 <span class="text-slate-500">離開/重置</span>
               </p>
             </div>
@@ -470,29 +529,67 @@ onUnmounted(() => {
               <!-- 左側：快捷鍵說明 -->
               <div class="text-xs text-slate-600 space-y-1 flex-1 min-w-0">
                 <p class="flex flex-wrap items-center gap-1">
-                  <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">←→</kbd>
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >↑↓←→</kbd
+                  >
                   <span class="text-slate-500">移動</span>
-                  <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">Space</kbd>
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >Space</kbd
+                  >
                   <span class="text-slate-500">切換</span>
-                  <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">D</kbd>
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >D</kbd
+                  >
                   <span class="text-slate-500">刪除</span>
-                  <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">A</kbd>
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >A</kbd
+                  >
                   <span class="text-slate-500">復原</span>
                 </p>
                 <p class="flex flex-wrap items-center gap-1">
-                  <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">Z</kbd><span class="text-slate-400">+</span><kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">←→</kbd>
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >Z</kbd
+                  ><span class="text-slate-400">+</span
+                  ><kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >←→</kbd
+                  >
                   <span class="text-slate-500">左邊界</span>
-                  <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">X</kbd><span class="text-slate-400">+</span><kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">←→</kbd>
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >X</kbd
+                  ><span class="text-slate-400">+</span
+                  ><kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >←→</kbd
+                  >
                   <span class="text-slate-500">右邊界</span>
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >C</kbd
+                  >
+                  <span class="text-slate-500">快速合併</span>
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >S</kbd
+                  >
+                  <span class="text-slate-500">分割</span>
                 </p>
                 <p class="flex flex-wrap items-center gap-1">
-                  <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">S</kbd>
-                  <span class="text-slate-500">分割</span>
-                  <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">C</kbd>
-                  <span class="text-slate-500">合併</span>
-                  <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">Enter</kbd>
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >Enter</kbd
+                  >
                   <span class="text-slate-500">編輯</span>
-                  <kbd class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono">Esc</kbd>
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >Esc</kbd
+                  >
                   <span class="text-slate-500">離開</span>
                 </p>
               </div>
@@ -532,147 +629,166 @@ onUnmounted(() => {
             </div>
           </div>
 
-        <!-- 文字編輯模式提示 -->
-        <div
-          v-if="isTextEditMode"
-          class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 flex items-start gap-3"
-        >
-          <div class="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center shrink-0">
-            <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
+          <!-- 文字編輯模式提示 -->
+          <div
+            v-if="isTextEditMode"
+            class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800 flex items-start gap-3"
+          >
+            <div class="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center shrink-0">
+              <svg
+                class="w-5 h-5 text-amber-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
+              </svg>
+            </div>
+            <div>
+              <p class="font-medium text-amber-900">編輯模式</p>
+              <p class="text-amber-700 mt-0.5">
+                可直接修改下方文字，修改後點擊「重新判定」按鈕重新分詞。按
+                <kbd
+                  class="px-1.5 py-0.5 bg-amber-100 border border-amber-300 rounded text-xs font-mono"
+                  >Esc</kbd
+                >
+                離開編輯模式。
+              </p>
+            </div>
           </div>
-          <div>
-            <p class="font-medium text-amber-900">編輯模式</p>
-            <p class="text-amber-700 mt-0.5">
-              可直接修改下方文字，修改後點擊「重新判定」按鈕重新分詞。按
-              <kbd class="px-1.5 py-0.5 bg-amber-100 border border-amber-300 rounded text-xs font-mono">Esc</kbd>
-              離開編輯模式。
-            </p>
-          </div>
-        </div>
 
-        <!-- 標記區域 -->
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <div class="flex flex-wrap items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100">
-            <!-- 左側：狀態說明 -->
-            <div class="flex items-center gap-4">
-              <p class="text-sm text-slate-500">點擊詞彙切換狀態：</p>
-              <div class="flex items-center gap-4 text-xs">
-                <span class="flex items-center gap-1.5">
-                  <span class="w-3 h-3 bg-blue-500 rounded"></span>
-                  <span class="text-slate-600">正確</span>
-                </span>
-                <span class="flex items-center gap-1.5">
-                  <span class="w-3 h-3 bg-red-500 rounded"></span>
-                  <span class="text-slate-600">錯誤</span>
-                </span>
-                <span class="flex items-center gap-1.5">
-                  <span class="w-3 h-3 bg-slate-300 rounded"></span>
-                  <span class="text-slate-600">不計入</span>
-                </span>
+          <!-- 標記區域 -->
+          <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <div
+              class="flex flex-wrap items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100"
+            >
+              <!-- 左側：狀態說明 -->
+              <div class="flex items-center gap-4">
+                <p class="text-sm text-slate-500">點擊詞彙切換狀態：</p>
+                <div class="flex items-center gap-4 text-xs">
+                  <span class="flex items-center gap-1.5">
+                    <span class="w-3 h-3 bg-blue-500 rounded"></span>
+                    <span class="text-slate-600">正確</span>
+                  </span>
+                  <span class="flex items-center gap-1.5">
+                    <span class="w-3 h-3 bg-red-500 rounded"></span>
+                    <span class="text-slate-600">錯誤</span>
+                  </span>
+                  <span class="flex items-center gap-1.5">
+                    <span class="w-3 h-3 bg-slate-300 rounded"></span>
+                    <span class="text-slate-600">不計入</span>
+                  </span>
+                </div>
+              </div>
+              <!-- 右側：批次合併 -->
+              <div class="flex items-center gap-2">
+                <span class="text-sm text-slate-600">批次合併邊界：</span>
+                <input
+                  v-model="mergeChar"
+                  type="text"
+                  class="w-24 px-2 py-1 text-sm border border-slate-300 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="輸入文字"
+                  title="輸入要邊界的文字（如「請」、「的」）"
+                />
+                <button
+                  class="px-2.5 py-1 text-sm bg-violet-50 text-violet-600 font-medium rounded-lg hover:bg-violet-100 transition-colors border border-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  :disabled="!mergeChar.trim()"
+                  title="將所有匹配的文字合併到前一個區塊"
+                  @click="batchMerge('left')"
+                >
+                  ← 向左
+                </button>
+                <button
+                  class="px-2.5 py-1 text-sm bg-violet-50 text-violet-600 font-medium rounded-lg hover:bg-violet-100 transition-colors border border-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  :disabled="!mergeChar.trim()"
+                  title="將所有匹配的文字合併到後一個區塊"
+                  @click="batchMerge('right')"
+                >
+                  向右 →
+                </button>
               </div>
             </div>
-            <!-- 右側：批次合併 -->
-            <div class="flex items-center gap-2">
-              <span class="text-sm text-slate-600">批次合併：</span>
-              <input
-                v-model="mergeChar"
-                type="text"
-                class="w-24 px-2 py-1 text-sm border border-slate-300 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="輸入文字"
-                title="輸入要批次合併的文字（如標點符號或單字）"
+            <div class="marking-area">
+              <MarkingLine
+                v-for="line in lines"
+                :key="line.id"
+                :line="line"
+                :selected-segment-id="selection.lineId === line.id ? selection.segmentId : null"
+                :edit-mode="selection.lineId === line.id ? editMode : 'none'"
+                :is-text-edit-mode="isTextEditMode"
+                :should-focus="isTextEditMode && selection.lineId === line.id"
+                :get-preview-highlight="
+                  selection.lineId === line.id ? getPreviewHighlight : undefined
+                "
+                :is-adjacent-preview="selection.lineId === line.id ? isAdjacentPreview : undefined"
+                :get-search-matches="
+                  search.isSearchOpen.value ? search.getSegmentMatches : undefined
+                "
+                :current-search-match="search.currentMatch.value"
+                @toggle-segment="handleToggleSegment"
+                @select-segment="handleSelectSegment"
+                @update-line-text="handleUpdateLineText"
+                @re-parse-line="handleReParseLine"
               />
-              <button
-                class="px-2.5 py-1 text-sm bg-violet-50 text-violet-600 font-medium rounded-lg hover:bg-violet-100 transition-colors border border-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                :disabled="!mergeChar.trim()"
-                title="將所有匹配的文字合併到前一個區塊"
-                @click="batchMerge('left')"
-              >
-                ← 向左
-              </button>
-              <button
-                class="px-2.5 py-1 text-sm bg-violet-50 text-violet-600 font-medium rounded-lg hover:bg-violet-100 transition-colors border border-violet-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                :disabled="!mergeChar.trim()"
-                title="將所有匹配的文字合併到後一個區塊"
-                @click="batchMerge('right')"
-              >
-                向右 →
-              </button>
             </div>
           </div>
-          <div class="marking-area">
-            <MarkingLine
-              v-for="line in lines"
-              :key="line.id"
-              :line="line"
-              :selected-segment-id="selection.lineId === line.id ? selection.segmentId : null"
-              :edit-mode="selection.lineId === line.id ? editMode : 'none'"
-              :is-text-edit-mode="isTextEditMode"
-              :should-focus="isTextEditMode && selection.lineId === line.id"
-              :get-preview-highlight="selection.lineId === line.id ? getPreviewHighlight : undefined"
-              :is-adjacent-preview="selection.lineId === line.id ? isAdjacentPreview : undefined"
-              :get-search-matches="search.isSearchOpen.value ? search.getSegmentMatches : undefined"
-              :current-search-match="search.currentMatch.value"
-              @toggle-segment="handleToggleSegment"
-              @select-segment="handleSelectSegment"
-              @update-line-text="handleUpdateLineText"
-              @re-parse-line="handleReParseLine"
-            />
+
+          <!-- 總計統計（小尺寸時顯示在下方） -->
+          <div class="xl:hidden">
+            <TotalStats :lines="lines" />
           </div>
         </div>
 
-        <!-- 總計統計（小尺寸時顯示在下方） -->
-        <div class="xl:hidden">
-          <TotalStats :lines="lines" />
-        </div>
+        <!-- 右側：操作按鈕（大尺寸時固定） -->
+        <aside class="hidden xl:block xl:w-32 xl:shrink-0">
+          <div class="sticky top-20 space-y-2">
+            <p class="font-medium text-slate-700 text-xs mb-2">操作</p>
+            <button
+              class="w-full px-3 py-2 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-all shadow-sm hover:shadow"
+              title="重新分詞並重置所有標記（警告：會清除目前的標記）"
+              @click="handleReParseAll"
+            >
+              重新判定
+            </button>
+            <button
+              v-if="isTextEditMode"
+              class="w-full px-3 py-2 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 transition-all shadow-sm hover:shadow flex flex-col items-center leading-tight"
+              title="離開文字編輯模式，返回標記模式"
+              @click="exitTextEditMode"
+            >
+              <span>離開編輯</span>
+              <span class="text-[10px] opacity-75">(Esc)</span>
+            </button>
+            <button
+              v-else
+              class="w-full px-3 py-2 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 transition-all shadow-sm hover:shadow flex flex-col items-center leading-tight"
+              title="進入文字編輯模式，可修改原始文字"
+              @click="enterTextEditMode"
+            >
+              <span>編輯模式</span>
+              <span class="text-[10px] opacity-75">(Enter)</span>
+            </button>
+            <button
+              class="w-full px-3 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-all border border-slate-200"
+              title="返回文字輸入畫面，保留目前文字內容"
+              @click="handleBackToInput"
+            >
+              重新輸入
+            </button>
+
+            <!-- 統計數據（大尺寸時顯示在操作下方） -->
+            <div class="pt-3 mt-3 border-t border-slate-200 space-y-2">
+              <p class="font-medium text-slate-700 text-xs mb-2">統計</p>
+              <TotalStats :lines="lines" layout="vertical" />
+            </div>
+          </div>
+        </aside>
       </div>
-
-      <!-- 右側：操作按鈕（大尺寸時固定） -->
-      <aside class="hidden xl:block xl:w-32 xl:shrink-0">
-        <div class="sticky top-20 space-y-2">
-          <p class="font-medium text-slate-700 text-xs mb-2">操作</p>
-          <button
-            class="w-full px-3 py-2 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-all shadow-sm hover:shadow"
-            title="重新分詞並重置所有標記（警告：會清除目前的標記）"
-            @click="handleReParseAll"
-          >
-            重新判定
-          </button>
-          <button
-            v-if="isTextEditMode"
-            class="w-full px-3 py-2 bg-emerald-500 text-white text-sm font-medium rounded-lg hover:bg-emerald-600 transition-all shadow-sm hover:shadow flex flex-col items-center leading-tight"
-            title="離開文字編輯模式，返回標記模式"
-            @click="exitTextEditMode"
-          >
-            <span>離開編輯</span>
-            <span class="text-[10px] opacity-75">(Esc)</span>
-          </button>
-          <button
-            v-else
-            class="w-full px-3 py-2 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 transition-all shadow-sm hover:shadow flex flex-col items-center leading-tight"
-            title="進入文字編輯模式，可修改原始文字"
-            @click="enterTextEditMode"
-          >
-            <span>編輯模式</span>
-            <span class="text-[10px] opacity-75">(Enter)</span>
-          </button>
-          <button
-            class="w-full px-3 py-2 bg-slate-100 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-200 transition-all border border-slate-200"
-            title="返回文字輸入畫面，保留目前文字內容"
-            @click="handleBackToInput"
-          >
-            重新輸入
-          </button>
-
-          <!-- 統計數據（大尺寸時顯示在操作下方） -->
-          <div class="pt-3 mt-3 border-t border-slate-200 space-y-2">
-            <p class="font-medium text-slate-700 text-xs mb-2">統計</p>
-            <TotalStats :lines="lines" layout="vertical" />
-          </div>
-        </div>
-      </aside>
-    </div>
     </main>
 
     <!-- 頁尾版權聲明 -->
@@ -681,7 +797,10 @@ onUnmounted(() => {
         <p class="text-sm text-slate-500">&copy; 2025 WER Tool. All rights reserved.</p>
         <p class="text-xs text-slate-400 mt-1">
           問題回報或建議請聯繫：
-          <a href="mailto:johnny_pcp@hotmail.com" class="text-blue-500 hover:text-blue-600 hover:underline transition-colors">
+          <a
+            href="mailto:johnny_pcp@hotmail.com"
+            class="text-blue-500 hover:text-blue-600 hover:underline transition-colors"
+          >
             johnny_pcp@hotmail.com
           </a>
         </p>

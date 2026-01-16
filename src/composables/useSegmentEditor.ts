@@ -169,13 +169,26 @@ export function useSegmentEditor(
     selected.segment.isDeleted = !selected.segment.isDeleted
   }
 
-  // 切換錯誤狀態
+  // 切換狀態：正常 → 錯誤 → 不判定 → 正常（三態循環）
   function toggleError(): void {
     const selected = getSelectedSegment()
     if (!selected) return
 
     onBeforeAction?.()
-    selected.segment.isError = !selected.segment.isError
+    const segment = selected.segment
+
+    if (segment.isDeleted) {
+      // 不判定 → 正常
+      segment.isDeleted = false
+      segment.isError = false
+    } else if (segment.isError) {
+      // 錯誤 → 不判定
+      segment.isError = false
+      segment.isDeleted = true
+    } else {
+      // 正常 → 錯誤
+      segment.isError = true
+    }
   }
 
   // C: 將當前區塊與下一個區塊合併

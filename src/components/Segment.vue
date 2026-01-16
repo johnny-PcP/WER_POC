@@ -23,8 +23,13 @@ const emit = defineEmits<{
 }>()
 
 function handleClick(id: string) {
-  emit('select', id)
-  emit('toggle', id)
+  if (props.isSelected) {
+    // 已選中：切換狀態
+    emit('toggle', id)
+  } else {
+    // 未選中：只移動選取框
+    emit('select', id)
+  }
 }
 
 // 判斷是否應該顯示預覽
@@ -104,19 +109,19 @@ function getSearchHighlightedParts(): TextPart[] {
     ]"
     @click="handleClick(segment.id)"
   >
-    <!-- 左邊箭頭指示器 -->
+    <!-- 左邊界調整指示器（Z 模式） -->
     <span
       v-if="isSelected && editMode === 'left'"
       class="arrow-indicator arrow-left"
     >
-      ◀
+      ◀▶
     </span>
-    <!-- 右邊箭頭指示器 -->
+    <!-- 右邊界調整指示器（X 模式） -->
     <span
       v-if="isSelected && editMode === 'right'"
       class="arrow-indicator arrow-right"
     >
-      ▶
+      ◀▶
     </span>
 
     <!-- 預覽高亮模式 -->
