@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import type { TextLine, Selection } from '@/types'
 import { parseText, reParseLine, resetIdCounters, reassignIds } from '@/composables/useTextParser'
 import { useKeyboard } from '@/composables/useKeyboard'
 import { useSegmentEditor } from '@/composables/useSegmentEditor'
+import { useSegmentPreview } from '@/composables/useSegmentPreview'
+import { useSearch } from '@/composables/useSearch'
 import { useStorage } from '@/composables/useStorage'
 import { useHistory } from '@/composables/useHistory'
 import TextInputArea from '@/components/TextInputArea.vue'
 import MarkingLine from '@/components/MarkingLine.vue'
 import TotalStats from '@/components/TotalStats.vue'
+import SearchBar from '@/components/SearchBar.vue'
 
 const lines = ref<TextLine[]>([])
 const isMarking = ref(false)
@@ -75,6 +78,31 @@ const { editMode } = useKeyboard(() => lines.value, selection, {
   onUndo: () => handleUndo(),
   onMergeNext: () => editor.mergeWithNext(),
 })
+
+// 設置邊界調整預覽
+const { getPreviewHighlight, isAdjacentPreview } = useSegmentPreview(
+  () => lines.value,
+  selection,
+  editMode
+)
+
+// 設置搜尋功能
+const search = useSearch(() => lines.value)
+
+// 當前搜尋匹配變化時自動選取並滾動
+watch(
+  () => search.currentMatch.value,
+  (match) => {
+    if (match) {
+      selection.lineId = match.lineId
+      selection.segmentId = match.segmentId
+      nextTick(() => {
+        const el = document.querySelector(`[data-segment-id="${match.segmentId}"]`)
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      })
+    }
+  }
+)
 
 function handleStartMarking(text: string) {
   inputText.value = text
@@ -273,14 +301,26 @@ function batchMerge(direction: 'left' | 'right') {
   }
 }
 
-// 全域鍵盤事件（Enter 和 Esc）
+// 全域鍵盤事件（Enter、Esc 和 Ctrl+F）
 function handleGlobalKeyDown(e: KeyboardEvent) {
+  // Ctrl+F 或 Cmd+F 開啟搜尋（在標記模式下）
+  if ((e.ctrlKey || e.metaKey) && e.key === 'f' && isMarking.value) {
+    e.preventDefault()
+    search.openSearch()
+    return
+  }
+
   // 如果在輸入框內，不處理
   if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) {
     // 在文字編輯模式下按 Esc 離開
     if (e.key === 'Escape' && isTextEditMode.value) {
       e.preventDefault()
       exitTextEditMode()
+    }
+    // 在搜尋框按 Esc 關閉搜尋
+    if (e.key === 'Escape' && search.isSearchOpen.value) {
+      e.preventDefault()
+      search.closeSearch()
     }
     return
   }
@@ -293,7 +333,9 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
     enterTextEditMode()
   } else if (e.key === 'Escape') {
     e.preventDefault()
-    if (isTextEditMode.value) {
+    if (search.isSearchOpen.value) {
+      search.closeSearch()
+    } else if (isTextEditMode.value) {
       exitTextEditMode()
     } else {
       // 只重新分配 ID，修復方向鍵導航問題（不重置標記）
@@ -329,6 +371,18 @@ onUnmounted(() => {
         </div>
       </div>
     </header>
+
+    <!-- 搜尋列 -->
+    <SearchBar
+      :is-open="search.isSearchOpen.value"
+      :search-status="search.searchStatus.value"
+      :case-sensitive="search.caseSensitive.value"
+      @update:model-value="search.searchQuery.value = $event"
+      @update:case-sensitive="search.caseSensitive.value = $event"
+      @next="search.nextMatch()"
+      @prev="search.prevMatch()"
+      @close="search.closeSearch()"
+    />
 
     <main class="flex-1 max-w-5xl xl:max-w-7xl w-full mx-auto px-4 py-6">
       <!-- 輸入區 -->
@@ -555,6 +609,11 @@ onUnmounted(() => {
               :selected-segment-id="selection.lineId === line.id ? selection.segmentId : null"
               :edit-mode="selection.lineId === line.id ? editMode : 'none'"
               :is-text-edit-mode="isTextEditMode"
+              :should-focus="isTextEditMode && selection.lineId === line.id"
+              :get-preview-highlight="selection.lineId === line.id ? getPreviewHighlight : undefined"
+              :is-adjacent-preview="selection.lineId === line.id ? isAdjacentPreview : undefined"
+              :get-search-matches="search.isSearchOpen.value ? search.getSegmentMatches : undefined"
+              :current-search-match="search.currentMatch.value"
               @toggle-segment="handleToggleSegment"
               @select-segment="handleSelectSegment"
               @update-line-text="handleUpdateLineText"
@@ -563,8 +622,10 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- 總計統計 -->
-        <TotalStats :lines="lines" />
+        <!-- 總計統計（小尺寸時顯示在下方） -->
+        <div class="xl:hidden">
+          <TotalStats :lines="lines" />
+        </div>
       </div>
 
       <!-- 右側：操作按鈕（大尺寸時固定） -->
@@ -603,6 +664,12 @@ onUnmounted(() => {
           >
             重新輸入
           </button>
+
+          <!-- 統計數據（大尺寸時顯示在操作下方） -->
+          <div class="pt-3 mt-3 border-t border-slate-200 space-y-2">
+            <p class="font-medium text-slate-700 text-xs mb-2">統計</p>
+            <TotalStats :lines="lines" layout="vertical" />
+          </div>
         </div>
       </aside>
     </div>

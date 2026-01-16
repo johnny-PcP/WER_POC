@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { TextLine } from '@/types'
+import type { PreviewHighlight } from '@/composables/useSegmentPreview'
+import type { SearchMatch } from '@/composables/useSearch'
 import { getLineStats } from '@/composables/useScoring'
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import Segment from './Segment.vue'
 
 const props = defineProps<{
@@ -9,7 +11,26 @@ const props = defineProps<{
   selectedSegmentId: string | null
   editMode: 'none' | 'left' | 'right'
   isTextEditMode: boolean
+  shouldFocus?: boolean
+  getPreviewHighlight?: (segmentId: string) => PreviewHighlight | null
+  isAdjacentPreview?: (segmentId: string) => boolean
+  getSearchMatches?: (segmentId: string) => SearchMatch[]
+  currentSearchMatch?: SearchMatch | null
 }>()
+
+const inputRef = ref<HTMLInputElement | null>(null)
+
+// 當需要 focus 時，自動聚焦輸入框
+watch(
+  [() => props.shouldFocus, () => props.isTextEditMode],
+  ([shouldFocus, isTextEditMode]) => {
+    if (shouldFocus && isTextEditMode) {
+      nextTick(() => {
+        inputRef.value?.focus()
+      })
+    }
+  },
+)
 
 const emit = defineEmits<{
   toggleSegment: [lineId: string, segmentId: string]
@@ -56,6 +77,7 @@ function handleReParseLine() {
     <template v-if="isTextEditMode">
       <div class="flex-1 flex items-center gap-2">
         <input
+          ref="inputRef"
           type="text"
           :value="editingText"
           class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -73,6 +95,10 @@ function handleReParseLine() {
           :segment="segment"
           :is-selected="segment.id === selectedSegmentId"
           :edit-mode="segment.id === selectedSegmentId ? editMode : 'none'"
+          :preview-highlight="getPreviewHighlight?.(segment.id) ?? null"
+          :is-adjacent-preview="isAdjacentPreview?.(segment.id) ?? false"
+          :search-matches="getSearchMatches?.(segment.id)"
+          :current-search-match="currentSearchMatch"
           @toggle="handleToggle"
           @select="handleSelect"
         />
