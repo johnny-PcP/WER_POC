@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import type { TextLine, Selection } from '@/types'
 import { parseText, reParseLine, resetIdCounters, reassignIds } from '@/composables/useTextParser'
 import { useKeyboard } from '@/composables/useKeyboard'
@@ -16,7 +16,14 @@ import SearchBar from '@/components/SearchBar.vue'
 const lines = ref<TextLine[]>([])
 const isMarking = ref(false)
 const inputText = ref('')
-const isTextEditMode = ref(false)
+
+// 三模式：viewing（閱覽）、wer（WER編輯）、text（文字編輯）
+type EditingMode = 'viewing' | 'wer' | 'text'
+const editingMode = ref<EditingMode>('viewing')
+
+// 相容性：isTextEditMode 用於現有 UI 判斷
+const isTextEditMode = computed(() => editingMode.value === 'text')
+
 const mergeChar = ref('')
 
 const selection = reactive<Selection>({
@@ -66,18 +73,23 @@ onMounted(() => {
 // 設置 segment editor，傳入 saveCurrentState 作為 onBeforeAction
 const editor = useSegmentEditor(() => lines.value, selection, saveCurrentState)
 
-// 設置鍵盤事件
-const { editMode } = useKeyboard(() => lines.value, selection, {
-  onToggleError: () => editor.toggleError(),
-  onDelete: () => editor.deleteSegment(),
-  onExpandLeft: () => editor.expandLeft(),
-  onShrinkLeft: () => editor.shrinkLeft(),
-  onShrinkRight: () => editor.shrinkRight(),
-  onExpandRight: () => editor.expandRight(),
-  onSplit: (side) => editor.splitSegment(side),
-  onUndo: () => handleUndo(),
-  onMergeNext: () => editor.mergeWithNext(),
-})
+// 設置鍵盤事件（傳入 editingMode 以控制快捷鍵攔截）
+const { editMode } = useKeyboard(
+  () => lines.value,
+  selection,
+  {
+    onToggleError: () => editor.toggleError(),
+    onDelete: () => editor.deleteSegment(),
+    onExpandLeft: () => editor.expandLeft(),
+    onShrinkLeft: () => editor.shrinkLeft(),
+    onShrinkRight: () => editor.shrinkRight(),
+    onExpandRight: () => editor.expandRight(),
+    onSplit: (side) => editor.splitSegment(side),
+    onUndo: () => handleUndo(),
+    onMergeNext: () => editor.mergeWithNext(),
+  },
+  editingMode,
+)
 
 // 設置邊界調整預覽
 const { getPreviewHighlight, isAdjacentPreview } = useSegmentPreview(
@@ -126,7 +138,7 @@ function handleBackToInput() {
   inputText.value = lines.value.map((l) => l.originalText).join('\n')
   lines.value = []
   isMarking.value = false
-  isTextEditMode.value = false
+  editingMode.value = 'viewing'
   selection.lineId = null
   selection.segmentId = null
   history.clearHistory()
@@ -136,7 +148,7 @@ function handleBackToInput() {
 function handleClearAll() {
   lines.value = []
   isMarking.value = false
-  isTextEditMode.value = false
+  editingMode.value = 'viewing'
   inputText.value = ''
   selection.lineId = null
   selection.segmentId = null
@@ -170,17 +182,28 @@ function handleToggleSegment(lineId: string, segmentId: string) {
 function handleSelectSegment(lineId: string, segmentId: string) {
   selection.lineId = lineId
   selection.segmentId = segmentId
+  // 點擊段落時進入 WER 編輯模式
+  editingMode.value = 'wer'
 }
 
 // 文字編輯模式
 function enterTextEditMode() {
-  isTextEditMode.value = true
+  editingMode.value = 'text'
 }
 
 function exitTextEditMode() {
-  isTextEditMode.value = false
+  // 回到 WER 編輯模式（不是閱覽模式）
+  editingMode.value = 'wer'
   // 離開編輯模式時，根據編輯後的文字重新生成所有行
   reParseAllFromEditedText()
+}
+
+// 退出到閱覽模式
+function exitToViewing() {
+  editingMode.value = 'viewing'
+  // 清除選取
+  selection.lineId = null
+  selection.segmentId = null
 }
 
 // 從編輯後的文字重新解析全部（重設 ID）
@@ -357,26 +380,28 @@ function batchMerge(direction: 'left' | 'right') {
   }
 }
 
-// 全域鍵盤事件（Enter、Esc 和 Ctrl+F）
+// 全域鍵盤事件（根據三模式處理）
 function handleGlobalKeyDown(e: KeyboardEvent) {
-  // Ctrl+F 或 Cmd+F 開啟搜尋（在標記模式下）
+  // Ctrl+F 或 Cmd+F 開啟搜尋（在標記模式下，任何編輯模式都可用）
   if ((e.ctrlKey || e.metaKey) && e.key === 'f' && isMarking.value) {
     e.preventDefault()
     search.openSearch()
     return
   }
 
-  // 如果在輸入框內，不處理
+  // 如果在輸入框內（textarea / input）
   if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) {
-    // 在文字編輯模式下按 Esc 離開
-    if (e.key === 'Escape' && isTextEditMode.value) {
+    // 在文字編輯模式下按 Esc → 回到 WER 編輯模式
+    if (e.key === 'Escape' && editingMode.value === 'text') {
       e.preventDefault()
       exitTextEditMode()
+      return
     }
     // 在搜尋框按 Esc 關閉搜尋
     if (e.key === 'Escape' && search.isSearchOpen.value) {
       e.preventDefault()
       search.closeSearch()
+      return
     }
     return
   }
@@ -384,20 +409,29 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
   // 非輸入框情況下
   if (!isMarking.value) return
 
-  if (e.key === 'Enter') {
-    e.preventDefault()
-    enterTextEditMode()
-  } else if (e.key === 'Escape') {
-    e.preventDefault()
-    if (search.isSearchOpen.value) {
-      search.closeSearch()
-    } else if (isTextEditMode.value) {
-      exitTextEditMode()
+  // 閱覽模式：不攔截任何快捷鍵（瀏覽器正常運作）
+  if (editingMode.value === 'viewing') {
+    return
+  }
+
+  // WER 編輯模式：處理快捷鍵
+  if (editingMode.value === 'wer') {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      enterTextEditMode()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      if (search.isSearchOpen.value) {
+        search.closeSearch()
+      } else {
+        // Esc → 回到閱覽模式
+        exitToViewing()
+      }
+    } else if (e.key === 'r' || e.key === 'R') {
+      // 重置排列（保留標記狀態，修復方向鍵導航問題）
+      e.preventDefault()
+      handleReassignIds()
     }
-  } else if (e.key === 'r' || e.key === 'R') {
-    // 重置排列（保留標記狀態，修復方向鍵導航問題）
-    e.preventDefault()
-    handleReassignIds()
   }
 }
 
@@ -485,100 +519,120 @@ onUnmounted(() => {
         <!-- 左側：快捷鍵說明（大尺寸時固定） -->
         <aside class="hidden 2xl:block 2xl:w-48 2xl:shrink-0">
           <div class="sticky top-20 space-y-2 text-xs text-slate-600">
-            <p class="font-medium text-slate-700 mb-2">快捷鍵</p>
-            <div class="space-y-1.5">
-              <p class="flex items-center gap-1.5">
-                <kbd
-                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
-                  >↑↓←→</kbd
-                >
-                <span class="text-slate-500">移動</span>
-              </p>
-              <p class="flex items-center gap-1.5">
-                <kbd
-                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
-                  >Space</kbd
-                >
-                <span class="text-slate-500">切換狀態</span>
-              </p>
-              <p class="flex items-center gap-1.5">
-                <kbd
-                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
-                  >D</kbd
-                >
-                <span class="text-slate-500">刪除</span>
-              </p>
-              <p class="flex items-center gap-1.5">
-                <kbd
-                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
-                  >A</kbd
-                >
-                <span class="text-slate-500">復原</span>
-              </p>
-            </div>
-            <div class="pt-2 border-t border-slate-200 space-y-1.5">
-              <p class="flex items-center gap-1.5">
-                <kbd
-                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
-                  >Z</kbd
-                >
-                <span class="text-slate-400">+</span>
-                <kbd
-                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
-                  >←→</kbd
-                >
-              </p>
-              <p class="text-slate-500 pl-1">調整左邊界</p>
-              <p class="flex items-center gap-1.5">
-                <kbd
-                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
-                  >X</kbd
-                >
-                <span class="text-slate-400">+</span>
-                <kbd
-                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
-                  >←→</kbd
-                >
-              </p>
-              <p class="text-slate-500 pl-1">調整右邊界</p>
+            <!-- 閱覽模式提示 -->
+            <template v-if="editingMode === 'viewing'">
+              <p class="font-medium text-slate-700 mb-2">閱覽模式</p>
+              <p class="text-slate-500">點擊段落開始編輯</p>
+            </template>
+            <!-- WER 編輯模式：快捷鍵說明 -->
+            <template v-else-if="editingMode === 'wer'">
+              <p class="font-medium text-slate-700 mb-2">WER 編輯模式</p>
+              <div class="space-y-1.5">
+                <p class="flex items-center gap-1.5">
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >↑↓←→</kbd
+                  >
+                  <span class="text-slate-500">移動</span>
+                </p>
+                <p class="flex items-center gap-1.5">
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >Space</kbd
+                  >
+                  <span class="text-slate-500">切換狀態</span>
+                </p>
+                <p class="flex items-center gap-1.5">
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >D</kbd
+                  >
+                  <span class="text-slate-500">刪除</span>
+                </p>
+                <p class="flex items-center gap-1.5">
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >A</kbd
+                  >
+                  <span class="text-slate-500">復原</span>
+                </p>
+              </div>
+              <div class="pt-2 border-t border-slate-200 space-y-1.5">
+                <p class="flex items-center gap-1.5">
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >Z</kbd
+                  >
+                  <span class="text-slate-400">+</span>
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >←→</kbd
+                  >
+                </p>
+                <p class="text-slate-500 pl-1">調整左邊界</p>
+                <p class="flex items-center gap-1.5">
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >X</kbd
+                  >
+                  <span class="text-slate-400">+</span>
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >←→</kbd
+                  >
+                </p>
+                <p class="text-slate-500 pl-1">調整右邊界</p>
+                <p class="flex items-center gap-1.5 mt-2">
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >C</kbd
+                  >
+                  <span class="text-slate-500">快速向右合併</span>
+                </p>
+                <p class="flex items-center gap-1.5">
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >S</kbd
+                  >
+                  <span class="text-slate-500">分割邊界</span>
+                </p>
+              </div>
+              <div class="pt-2 border-t border-slate-200 space-y-1.5">
+                <p class="flex items-center gap-1.5">
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >Enter</kbd
+                  >
+                  <span class="text-slate-500">編輯模式</span>
+                </p>
+                <p class="flex items-center gap-1.5">
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >Esc</kbd
+                  >
+                  <span class="text-slate-500">離開</span>
+                </p>
+                <p class="flex items-center gap-1.5">
+                  <kbd
+                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
+                    >R</kbd
+                  >
+                  <span class="text-slate-500">重置排列</span>
+                </p>
+              </div>
+            </template>
+            <!-- 文字編輯模式 -->
+            <template v-else>
+              <p class="font-medium text-slate-700 mb-2">文字編輯模式</p>
+              <p class="text-slate-500">直接編輯文字內容</p>
               <p class="flex items-center gap-1.5 mt-2">
-                <kbd
-                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
-                  >C</kbd
-                >
-                <span class="text-slate-500">快速向右合併</span>
-              </p>
-              <p class="flex items-center gap-1.5">
-                <kbd
-                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
-                  >S</kbd
-                >
-                <span class="text-slate-500">分割邊界</span>
-              </p>
-            </div>
-            <div class="pt-2 border-t border-slate-200 space-y-1.5">
-              <p class="flex items-center gap-1.5">
-                <kbd
-                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
-                  >Enter</kbd
-                >
-                <span class="text-slate-500">編輯模式</span>
-              </p>
-              <p class="flex items-center gap-1.5">
                 <kbd
                   class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
                   >Esc</kbd
                 >
-                <span class="text-slate-500">離開</span>
+                <span class="text-slate-500">返回 WER 編輯</span>
               </p>
-              <p class="flex items-center gap-1.5">
-                <kbd
-                  class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
-                  >R</kbd
-                >
-                <span class="text-slate-500">重置排列</span>
-              </p>
-            </div>
+            </template>
           </div>
         </aside>
 
@@ -586,8 +640,12 @@ onUnmounted(() => {
         <div class="flex-1 space-y-4">
           <!-- 小尺寸工具列 -->
           <div class="2xl:hidden bg-white rounded-xl shadow-sm border border-slate-200 p-3 space-y-2.5">
-            <!-- 快捷鍵說明 -->
-            <div class="text-xs text-slate-600 space-y-0.5">
+            <!-- 閱覽模式提示 -->
+            <div v-if="editingMode === 'viewing'" class="text-sm text-slate-500 text-center py-1">
+              點擊段落開始編輯
+            </div>
+            <!-- WER 編輯模式：快捷鍵說明 -->
+            <div v-else-if="editingMode === 'wer'" class="text-xs text-slate-600 space-y-0.5">
               <p class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                 <span class="inline-flex items-center gap-1">
                   <kbd class="px-1 py-0.5 bg-slate-50 border border-slate-300 rounded text-[10px] font-mono">↑↓←→</kbd>
@@ -774,8 +832,14 @@ onUnmounted(() => {
                 v-for="line in lines"
                 :key="line.id"
                 :line="line"
-                :selected-segment-id="selection.lineId === line.id ? selection.segmentId : null"
-                :edit-mode="selection.lineId === line.id ? editMode : 'none'"
+                :selected-segment-id="
+                  editingMode !== 'viewing' && selection.lineId === line.id
+                    ? selection.segmentId
+                    : null
+                "
+                :edit-mode="
+                  editingMode !== 'viewing' && selection.lineId === line.id ? editMode : 'none'
+                "
                 :is-text-edit-mode="isTextEditMode"
                 :should-focus="isTextEditMode && selection.lineId === line.id"
                 :get-preview-highlight="

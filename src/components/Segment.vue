@@ -185,8 +185,6 @@ function getSearchHighlightedParts(): TextPart[] {
   border-bottom-color: transparent;
   color: #9ca3af;
   background-color: rgba(156, 163, 175, 0.1);
-  text-decoration: line-through;
-  text-decoration-color: rgba(156, 163, 175, 0.5);
 }
 
 /* === 選中狀態 - 基礎（正確狀態） === */

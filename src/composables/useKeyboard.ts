@@ -1,7 +1,8 @@
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, type Ref } from 'vue'
 import type { TextLine, Selection } from '@/types'
 
 export type EditMode = 'none' | 'left' | 'right'
+export type EditingMode = 'viewing' | 'wer' | 'text'
 
 export function useKeyboard(
   lines: () => TextLine[],
@@ -17,6 +18,7 @@ export function useKeyboard(
     onUndo: () => void
     onMergeNext: () => void
   },
+  editingMode: Ref<EditingMode>,
 ) {
   const isZPressed = ref(false)
   const isXPressed = ref(false)
@@ -251,6 +253,11 @@ export function useKeyboard(
   }
 
   function handleKeyDown(e: KeyboardEvent): void {
+    // 只在 WER 編輯模式下攔截快捷鍵
+    if (editingMode.value !== 'wer') {
+      return
+    }
+
     // 忽略輸入框內的按鍵
     if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) {
       return
