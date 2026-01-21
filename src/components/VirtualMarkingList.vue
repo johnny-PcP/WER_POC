@@ -102,6 +102,7 @@ defineExpose({
       >
         <MarkingLine
           :line="lines[virtualRow.index]!"
+          :line-number="virtualRow.index + 1"
           :selected-segment-id="
             editingMode !== 'viewing' && selectedLineId === lines[virtualRow.index]?.id
               ? selectedSegmentId

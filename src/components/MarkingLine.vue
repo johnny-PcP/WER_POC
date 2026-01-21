@@ -7,6 +7,7 @@ import Segment from './Segment.vue'
 
 const props = defineProps<{
   line: TextLine
+  lineNumber?: number
   selectedSegmentId: string | null
   editMode: 'none' | 'left' | 'right'
   isTextEditMode: boolean
@@ -95,6 +96,14 @@ function handleReParseLine() {
   <div
     class="marking-line flex items-start gap-4 py-2 border-b border-gray-200 transition-all duration-200"
   >
+    <!-- 行號 -->
+    <span
+      v-if="lineNumber !== undefined"
+      class="w-6 text-right text-xs text-slate-400 pt-4 shrink-0 select-none"
+    >
+      {{ lineNumber }}
+    </span>
+
     <!-- 文字編輯模式 / 標記模式 切換 -->
     <Transition
       enter-active-class="transition-opacity duration-200 ease-out"

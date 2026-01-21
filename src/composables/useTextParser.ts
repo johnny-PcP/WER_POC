@@ -18,8 +18,8 @@ export function resetIdCounters(): void {
 
 // 檢查是否為標點符號
 function isPunctuation(text: string): boolean {
-  // 中文標點符號
-  const chinesePunctuation = /^[，。、；：？！「」『』（）【】《》〈〉""''…—～·]+$/
+  // 中文標點符號（含特殊符號 ├ ─）
+  const chinesePunctuation = /^[，。、；：？！「」『』（）【】《》〈〉""''…—～·├─]+$/
   // 英文標點符號
   const englishPunctuation = /^[.,;:?!'"()\[\]{}<>@#$%^&*\-_+=|\\\/`~]+$/
 

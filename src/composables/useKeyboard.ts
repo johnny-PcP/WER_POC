@@ -326,12 +326,6 @@ export function useKeyboard(
       return
     }
 
-    // R 重置排列
-    if (e.key === 'r' || e.key === 'R') {
-      e.preventDefault()
-      callbacks.onReassignIds?.()
-      return
-    }
 
     // 方向鍵處理
     if (e.key === 'ArrowLeft') {
@@ -354,10 +348,22 @@ export function useKeyboard(
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      moveUp()
+      if (isZPressed.value) {
+        callbacks.onSplit('left')  // Z + ↑ = 分割左邊
+      } else if (isXPressed.value) {
+        callbacks.onSplit('right') // X + ↑ = 分割右邊
+      } else {
+        moveUp()
+      }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
-      moveDown()
+      if (isZPressed.value) {
+        callbacks.onSplit('left')  // Z + ↓ = 分割左邊
+      } else if (isXPressed.value) {
+        callbacks.onSplit('right') // X + ↓ = 分割右邊
+      } else {
+        moveDown()
+      }
     }
 
     // 空白鍵切換錯誤狀態
@@ -370,12 +376,6 @@ export function useKeyboard(
     if (e.key === 'd' || e.key === 'D' || e.key === 'Backspace') {
       e.preventDefault()
       callbacks.onDelete()
-    }
-
-    // S 分割區塊
-    if (e.key === 's' || e.key === 'S') {
-      e.preventDefault()
-      callbacks.onSplit(lastEditSide.value)
     }
 
     // A 復原上一個動作

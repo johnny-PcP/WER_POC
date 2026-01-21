@@ -37,6 +37,12 @@ const selection = reactive<Selection>({
   segmentId: null,
 })
 
+// 計分範圍
+const scoringRange = reactive({
+  start: null as number | null,
+  end: null as number | null,
+})
+
 const storage = useStorage()
 const history = useHistory()
 
@@ -95,9 +101,15 @@ const { editMode } = useKeyboard(
     onShrinkLeft: () => editor.shrinkLeft(),
     onShrinkRight: () => editor.shrinkRight(),
     onExpandRight: () => editor.expandRight(),
-    onSplit: (side) => editor.splitSegment(side),
+    onSplit: (side) => {
+      editor.splitSegment(side)
+      handleReassignIds()
+    },
     onUndo: () => handleUndo(),
-    onMergeNext: () => editor.mergeWithNext(),
+    onMergeNext: () => {
+      editor.mergeWithNext()
+      handleReassignIds()
+    },
     // 全域事件回調
     onOpenSearch: () => isMarking.value && search.openSearch(),
     onCloseSearch: () => search.closeSearch(),
@@ -364,6 +376,18 @@ function batchMerge(direction: 'left' | 'right') {
   }
 }
 
+// 合併行（文字編輯模式下，將下一行合併到當前行）
+function handleMergeLines(lineIndex: number) {
+  if (lineIndex >= lines.value.length - 1) return
+  saveCurrentState()
+  const currentLine = lines.value[lineIndex]
+  const nextLine = lines.value[lineIndex + 1]
+  if (currentLine && nextLine) {
+    currentLine.originalText += nextLine.originalText
+    lines.value.splice(lineIndex + 1, 1)
+  }
+}
+
 // 全域鍵盤事件已整合到 useKeyboard 中，無需重複監聽
 </script>
 
@@ -402,7 +426,7 @@ function batchMerge(direction: 'left' | 'right') {
       @close="search.closeSearch()"
     />
 
-    <main class="flex-1 max-w-5xl 2xl:max-w-7xl w-full mx-auto px-4 py-6">
+    <main class="flex-1 max-w-5xl md:max-w-7xl w-full mx-auto px-4 py-6">
       <!-- 輸入區 -->
       <Transition
         enter-active-class="transition-all duration-400 ease-out"
@@ -438,9 +462,9 @@ function batchMerge(direction: 'left' | 'right') {
       </div>
 
       <!-- 標記區（大尺寸三欄佈局） -->
-      <div v-else key="marking" class="2xl:flex 2xl:gap-4">
+      <div v-else key="marking" class="md:flex md:gap-4">
         <!-- 左側：快捷鍵說明（大尺寸時固定） -->
-        <aside class="hidden 2xl:block 2xl:w-48 2xl:shrink-0">
+        <aside class="hidden md:block md:w-48 md:shrink-0">
           <div class="sticky top-20 space-y-2 text-xs text-slate-600">
             <!-- 閱覽模式提示 -->
             <template v-if="editingMode === 'viewing'">
@@ -492,7 +516,7 @@ function batchMerge(direction: 'left' | 'right') {
                     >←→</kbd
                   >
                 </p>
-                <p class="text-slate-500 pl-1">調整左邊界</p>
+                <p class="text-slate-500 pl-1">←→ 調整 / ↑↓ 分割</p>
                 <p class="flex items-center gap-1.5">
                   <kbd
                     class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
@@ -501,23 +525,16 @@ function batchMerge(direction: 'left' | 'right') {
                   <span class="text-slate-400">+</span>
                   <kbd
                     class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
-                    >←→</kbd
+                    >←→↑↓</kbd
                   >
                 </p>
-                <p class="text-slate-500 pl-1">調整右邊界</p>
+                <p class="text-slate-500 pl-1">←→ 調整 / ↑↓ 分割</p>
                 <p class="flex items-center gap-1.5 mt-2">
                   <kbd
                     class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
                     >C</kbd
                   >
                   <span class="text-slate-500">快速向右合併</span>
-                </p>
-                <p class="flex items-center gap-1.5">
-                  <kbd
-                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
-                    >S</kbd
-                  >
-                  <span class="text-slate-500">分割邊界</span>
                 </p>
               </div>
               <div class="pt-2 border-t border-slate-200 space-y-1.5">
@@ -534,13 +551,6 @@ function batchMerge(direction: 'left' | 'right') {
                     >Esc</kbd
                   >
                   <span class="text-slate-500">離開</span>
-                </p>
-                <p class="flex items-center gap-1.5">
-                  <kbd
-                    class="px-1.5 py-0.5 bg-white border border-slate-300 rounded shadow-sm font-mono"
-                    >R</kbd
-                  >
-                  <span class="text-slate-500">重置排列</span>
                 </p>
               </div>
             </template>
@@ -562,7 +572,7 @@ function batchMerge(direction: 'left' | 'right') {
         <!-- 中間：主要內容區 -->
         <div class="flex-1 space-y-4">
           <!-- 小尺寸工具列 -->
-          <div class="2xl:hidden bg-white rounded-xl shadow-sm border border-slate-200 p-3 space-y-2.5">
+          <div class="md:hidden bg-white rounded-xl shadow-sm border border-slate-200 p-3 space-y-2.5">
             <!-- 閱覽模式提示 -->
             <div v-if="editingMode === 'viewing'" class="text-sm text-slate-500 text-center py-1">
               點擊段落開始編輯
@@ -589,14 +599,14 @@ function batchMerge(direction: 'left' | 'right') {
                 <span class="inline-flex items-center gap-0.5">
                   <kbd class="px-1 py-0.5 bg-slate-50 border border-slate-300 rounded text-[10px] font-mono">Z</kbd>
                   <span class="text-slate-400">+</span>
-                  <kbd class="px-1 py-0.5 bg-slate-50 border border-slate-300 rounded text-[10px] font-mono">←→</kbd>
-                  <span class="text-slate-500 ml-0.5">左邊界</span>
+                  <kbd class="px-1 py-0.5 bg-slate-50 border border-slate-300 rounded text-[10px] font-mono">←→↑↓</kbd>
+                  <span class="text-slate-500 ml-0.5">左邊界/分割</span>
                 </span>
                 <span class="inline-flex items-center gap-0.5">
                   <kbd class="px-1 py-0.5 bg-slate-50 border border-slate-300 rounded text-[10px] font-mono">X</kbd>
                   <span class="text-slate-400">+</span>
-                  <kbd class="px-1 py-0.5 bg-slate-50 border border-slate-300 rounded text-[10px] font-mono">←→</kbd>
-                  <span class="text-slate-500 ml-0.5">右邊界</span>
+                  <kbd class="px-1 py-0.5 bg-slate-50 border border-slate-300 rounded text-[10px] font-mono">←→↑↓</kbd>
+                  <span class="text-slate-500 ml-0.5">右邊界/分割</span>
                 </span>
               </p>
               <p class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -605,20 +615,12 @@ function batchMerge(direction: 'left' | 'right') {
                   <span class="text-slate-500">合併</span>
                 </span>
                 <span class="inline-flex items-center gap-1">
-                  <kbd class="px-1 py-0.5 bg-slate-50 border border-slate-300 rounded text-[10px] font-mono">S</kbd>
-                  <span class="text-slate-500">分割</span>
-                </span>
-                <span class="inline-flex items-center gap-1">
                   <kbd class="px-1 py-0.5 bg-slate-50 border border-slate-300 rounded text-[10px] font-mono">Enter</kbd>
                   <span class="text-slate-500">編輯</span>
                 </span>
                 <span class="inline-flex items-center gap-1">
                   <kbd class="px-1 py-0.5 bg-slate-50 border border-slate-300 rounded text-[10px] font-mono">Esc</kbd>
                   <span class="text-slate-500">離開</span>
-                </span>
-                <span class="inline-flex items-center gap-1">
-                  <kbd class="px-1 py-0.5 bg-slate-50 border border-slate-300 rounded text-[10px] font-mono">R</kbd>
-                  <span class="text-slate-500">重置排列</span>
                 </span>
               </p>
             </div>
@@ -771,45 +773,61 @@ function batchMerge(direction: 'left' | 'right') {
               />
               <!-- 少量行數時使用普通渲染 -->
               <template v-else>
-                <MarkingLine
-                  v-for="line in lines"
-                  :key="line.id"
-                  :line="line"
-                  :selected-segment-id="
-                    editingMode !== 'viewing' && selection.lineId === line.id
-                      ? selection.segmentId
-                      : null
-                  "
-                  :edit-mode="
-                    editingMode !== 'viewing' && selection.lineId === line.id ? editMode : 'none'
-                  "
-                  :is-text-edit-mode="isTextEditMode"
-                  :should-focus="isTextEditMode && selection.lineId === line.id"
-                  :get-preview-highlight="
-                    selection.lineId === line.id ? getPreviewHighlight : undefined
-                  "
-                  :is-adjacent-preview="selection.lineId === line.id ? isAdjacentPreview : undefined"
-                  :get-search-matches="
-                    search.isSearchOpen.value ? search.getSegmentMatches : undefined
-                  "
-                  :current-search-match="search.currentMatch.value"
-                  @toggle-segment="handleToggleSegment"
-                  @select-segment="handleSelectSegment"
-                  @update-line-text="handleUpdateLineText"
-                  @re-parse-line="handleReParseLine"
-                />
+                <template v-for="(line, index) in lines" :key="line.id">
+                  <MarkingLine
+                    :line="line"
+                    :line-number="index + 1"
+                    :selected-segment-id="
+                      editingMode !== 'viewing' && selection.lineId === line.id
+                        ? selection.segmentId
+                        : null
+                    "
+                    :edit-mode="
+                      editingMode !== 'viewing' && selection.lineId === line.id ? editMode : 'none'
+                    "
+                    :is-text-edit-mode="isTextEditMode"
+                    :should-focus="isTextEditMode && selection.lineId === line.id"
+                    :get-preview-highlight="
+                      selection.lineId === line.id ? getPreviewHighlight : undefined
+                    "
+                    :is-adjacent-preview="selection.lineId === line.id ? isAdjacentPreview : undefined"
+                    :get-search-matches="
+                      search.isSearchOpen.value ? search.getSegmentMatches : undefined
+                    "
+                    :current-search-match="search.currentMatch.value"
+                    @toggle-segment="handleToggleSegment"
+                    @select-segment="handleSelectSegment"
+                    @update-line-text="handleUpdateLineText"
+                    @re-parse-line="handleReParseLine"
+                  />
+                  <!-- 合併段落按鈕：僅在文字編輯模式且非最後一行時顯示 -->
+                  <button
+                    v-if="isTextEditMode && index < lines.length - 1"
+                    class="w-full py-1 text-slate-400 hover:text-blue-500 hover:bg-blue-50 text-lg font-bold transition-colors rounded"
+                    title="合併下一行到此行"
+                    @click="handleMergeLines(index)"
+                  >
+                    +
+                  </button>
+                </template>
               </template>
             </div>
           </div>
 
           <!-- 總計統計（小尺寸時顯示在下方） -->
-          <div class="2xl:hidden">
-            <TotalStats :lines="lines" />
+          <div class="md:hidden">
+            <TotalStats
+              :lines="lines"
+              :start-line="scoringRange.start"
+              :end-line="scoringRange.end"
+              @update:start-line="scoringRange.start = $event"
+              @update:end-line="scoringRange.end = $event"
+            />
           </div>
         </div>
 
         <!-- 右側：操作按鈕（大尺寸時固定） -->
-        <aside class="hidden 2xl:block 2xl:w-32 2xl:shrink-0">
+        <aside class="hidden md:block md:w-32 md:shrink-0">
           <div class="sticky top-20 space-y-2">
             <p class="font-medium text-slate-700 text-xs mb-2">操作</p>
             <button
@@ -848,7 +866,14 @@ function batchMerge(direction: 'left' | 'right') {
             <!-- 統計數據（大尺寸時顯示在操作下方） -->
             <div class="pt-3 mt-3 border-t border-slate-200 space-y-2">
               <p class="font-medium text-slate-700 text-xs mb-2">統計</p>
-              <TotalStats :lines="lines" layout="vertical" />
+              <TotalStats
+                :lines="lines"
+                layout="vertical"
+                :start-line="scoringRange.start"
+                :end-line="scoringRange.end"
+                @update:start-line="scoringRange.start = $event"
+                @update:end-line="scoringRange.end = $event"
+              />
             </div>
           </div>
         </aside>
