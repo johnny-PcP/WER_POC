@@ -47,6 +47,15 @@ const virtualizer = useVirtualizer(
 const virtualItems = computed(() => virtualizer.value.getVirtualItems())
 const totalSize = computed(() => virtualizer.value.getTotalSize())
 
+// 當 parentRef 綁定後，強制重新測量
+watch(parentRef, (el) => {
+  if (el) {
+    nextTick(() => {
+      virtualizer.value.measure()
+    })
+  }
+})
+
 // 當選中的行變化時，滾動到該行
 watch(
   () => props.selectedLineId,
@@ -135,6 +144,6 @@ defineExpose({
 
 <style scoped>
 .virtual-marking-list {
-  contain: strict;
+  contain: layout style;
 }
 </style>
